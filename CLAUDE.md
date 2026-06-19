@@ -21,3 +21,17 @@ Pipeline-based clipping processor:
 - `templates/` — Jinja2 output templates (summary.md.j2, failed_extraction.md.j2)
 - `clipping_watcher.py` — Watchdog-based file watcher orchestrating the pipeline
 - `tests/` — pytest suite, all external calls mocked
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in **Linear** via the Linear MCP — Photon Ventures team, "Tool Chest" project, every issue labeled `summarizer`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage roles map 1:1 to the Photon Ventures "Agentic State Machine" labels (mutually exclusive). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
