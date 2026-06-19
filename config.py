@@ -21,6 +21,27 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "extraction": {
         "min_content_length": 100,
     },
+    "summarization": {
+        "system_prompt": (
+            "You are a meticulous research assistant who writes concise, factual "
+            "summaries of articles and videos for a personal knowledge base. Base "
+            "every statement strictly on the provided content -- never invent facts, "
+            "figures, names, or sources. Preserve technical accuracy and follow the "
+            "requested output format exactly."
+        ),
+        # Lower temperature keeps summaries deterministic and faithful.
+        "temperature": 0.2,
+        # Upper bound on generated tokens so a summary can't run away.
+        "max_tokens": 1024,
+        # Max characters of source text fed to the model. ~100k chars is roughly
+        # 25k tokens, leaving headroom in a 32k context for the prompt and output.
+        "max_input_chars": 100000,
+        # Seconds to wait on the LLM endpoint before giving up (14b + long
+        # context is far slower than a 3b model).
+        "request_timeout": 300,
+        # Extra attempts after the first on a network/timeout failure.
+        "max_retries": 1,
+    },
 }
 
 

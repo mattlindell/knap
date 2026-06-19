@@ -1,20 +1,59 @@
+import logging
 import os
 import re
+import sys
 import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 from jinja2 import Environment, FileSystemLoader
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from config import load_config
+from config import load_config, DEFAULT_CONFIG
 from extractors.classifier import classify_url, ContentType
 from extractors.video import extract_video_content
 from extractors.article import extract_article_content
 from extractors.quality_gate import check_content_quality
 from llm.factory import create_provider
 
-TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "templates")
+LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
+
+logger = logging.getLogger("obsidian_summarizer")
+
+
+def setup_logging(level: int = logging.INFO) -> str:
+    """Configure rotating file logging (and console output when available).
+
+    Writes to ``logs/clipping_watcher.log`` next to this script, rotating at
+    1 MB with three backups. A console handler is added only when a real stdout
+    exists -- under ``pythonw.exe`` (the hidden launch path) ``sys.stdout`` is
+    ``None``, so the file handler is the sole sink. Returns the log file path.
+    """
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_path = os.path.join(LOG_DIR, "clipping_watcher.log")
+
+    logger.setLevel(level)
+    logger.handlers.clear()
+
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-7s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    file_handler = RotatingFileHandler(
+        log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+    )
+    file_handler.setFormatter(fmt)
+    logger.addHandler(file_handler)
+
+    if sys.stdout is not None:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(fmt)
+        logger.addHandler(console_handler)
+
+    return log_path
 
 
 class ClippingProcessor(FileSystemEventHandler):
@@ -25,6 +64,13 @@ class ClippingProcessor(FileSystemEventHandler):
             "min_content_length", 100
         )
 
+        # Merge user summarization settings over the built-in defaults so any
+        # omitted key still has a sane value.
+        self.summarization = {
+            **DEFAULT_CONFIG["summarization"],
+            **config.get("summarization", {}),
+        }
+
         self.jinja_env = Environment(
             loader=FileSystemLoader(TEMPLATE_DIR), keep_trailing_newline=True
         )
@@ -33,8 +79,8 @@ class ClippingProcessor(FileSystemEventHandler):
 
         os.makedirs(self.processed_dir, exist_ok=True)
 
-        print(f"Watching: {self.clippings_dir}")
-        print(f"Processing to: {self.processed_dir}")
+        logger.info("Watching: %s", self.clippings_dir)
+        logger.info("Processing to: %s", self.processed_dir)
 
     def on_created(self, event):
         if event.is_directory:
@@ -45,7 +91,7 @@ class ClippingProcessor(FileSystemEventHandler):
         if not file_path.lower().endswith(".md"):
             return
 
-        print(f"\nNew clipping detected: {os.path.basename(file_path)}")
+        logger.info("New clipping detected: %s", os.path.basename(file_path))
 
         # Wait a moment for the file to be fully written
         time.sleep(2)
@@ -110,13 +156,13 @@ class ClippingProcessor(FileSystemEventHandler):
                 metadata["title"] = title_match.group(1).strip().strip('"')
 
             if not metadata["url"]:
-                print("No URL found in clipping")
+                logger.warning("No URL found in clipping")
                 return None
 
             return metadata
 
-        except Exception as e:
-            print(f"Error reading clipping file: {e}")
+        except Exception:
+            logger.exception("Error reading clipping file")
             return None
 
     def _get_original_excerpt(self, content: str, max_length: int = 1000) -> str:
@@ -135,7 +181,7 @@ class ClippingProcessor(FileSystemEventHandler):
             # 1. Extract metadata
             clipping_metadata = self.extract_metadata_from_clipping(file_path)
             if not clipping_metadata:
-                print("Skipping - no URL found")
+                logger.info("Skipping - no URL found")
                 return
 
             url = clipping_metadata["url"]
@@ -144,7 +190,7 @@ class ClippingProcessor(FileSystemEventHandler):
             published = clipping_metadata.get("published", "Unknown")
             original_content = clipping_metadata.get("original_content", "")
 
-            print(f"Processing URL: {url}")
+            logger.info("Processing URL: %s", url)
 
             # 2. Classify URL
             content_type = classify_url(url)
@@ -169,12 +215,16 @@ class ClippingProcessor(FileSystemEventHandler):
 
             # 5. Build output
             if quality_ok:
-                # Build LLM prompt
+                # Build LLM prompt. Feed as much of the extracted text as the
+                # configured input budget allows -- the model has a large
+                # context window, so we no longer truncate to a few thousand
+                # characters.
+                content = result.text[: self.summarization["max_input_chars"]]
                 prompt = f"""Please analyze this content and provide a structured summary.
 
 Title: {title}
 URL: {url}
-Content: {result.text[:4000]}
+Content: {content}
 
 Please respond in this exact format:
 
@@ -189,8 +239,15 @@ Please respond in this exact format:
 **SUGGESTED CATEGORY:**
 [Suggest whether this belongs in: Attention Deficit Disorder, Home Automation, AI and LLMs, Servers and Infrastructure, Development, Management, Operating Systems, Jeep, Dog, Design, or Other]
 """
-                print("Sending to LLM for processing...")
-                llm_response = self.llm_provider.summarize(result.text, prompt)
+                logger.info("Sending to LLM for processing...")
+                llm_response = self.llm_provider.summarize(
+                    prompt,
+                    system=self.summarization["system_prompt"],
+                    temperature=self.summarization["temperature"],
+                    max_tokens=self.summarization["max_tokens"],
+                    timeout=self.summarization["request_timeout"],
+                    max_retries=self.summarization["max_retries"],
+                )
 
                 if llm_response:
                     template = self.jinja_env.get_template("summary.md.j2")
@@ -198,7 +255,7 @@ Please respond in this exact format:
                     output = template.render(**template_vars)
                 else:
                     # LLM failed -- fall through to failed path
-                    print("LLM failed, using failed extraction template")
+                    logger.warning("LLM failed, using failed extraction template")
                     template = self.jinja_env.get_template("failed_extraction.md.j2")
                     template_vars["original_excerpt"] = self._get_original_excerpt(
                         original_content
@@ -206,7 +263,9 @@ Please respond in this exact format:
                     output = template.render(**template_vars)
             else:
                 # Quality gate failed
-                print("Content quality below threshold, using failed extraction template")
+                logger.warning(
+                    "Content quality below threshold, using failed extraction template"
+                )
                 template = self.jinja_env.get_template("failed_extraction.md.j2")
                 template_vars["original_excerpt"] = self._get_original_excerpt(
                     original_content
@@ -223,19 +282,20 @@ Please respond in this exact format:
             with open(processed_path, "w", encoding="utf-8") as f:
                 f.write(output)
 
-            print(f"Processed and saved: {processed_filename}")
+            logger.info("Processed and saved: %s", processed_filename)
 
-        except Exception as e:
-            print(f"Error processing clipping: {e}")
+        except Exception:
+            logger.exception("Error processing clipping: %s", file_path)
 
 
 def main():
+    log_path = setup_logging()
     config = load_config()
 
     clippings_dir = config["paths"]["clippings_dir"]
     if not os.path.exists(clippings_dir):
-        print(f"Error: Clippings directory not found: {clippings_dir}")
-        print("Please update config.yaml with the correct path")
+        logger.error("Clippings directory not found: %s", clippings_dir)
+        logger.error("Please update config.yaml with the correct path")
         return
 
     processor = ClippingProcessor(config)
@@ -243,16 +303,15 @@ def main():
     observer.schedule(processor, clippings_dir, recursive=False)
 
     observer.start()
-    print("\nFolder watcher started!")
-    print("Waiting for new clippings...")
-    print("Press Ctrl+C to stop")
+    logger.info("Folder watcher started -- logging to %s", log_path)
+    logger.info("Waiting for new clippings... (Ctrl+C to stop)")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         observer.stop()
-        print("\nStopping folder watcher...")
+        logger.info("Stopping folder watcher...")
 
     observer.join()
 

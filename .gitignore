@@ -1,4 +1,6 @@
 config.yaml
+logs/
+*.log
 .venv/
 __pycache__/
 *.pyc

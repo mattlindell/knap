@@ -10,3 +10,12 @@ llm:
 
 extraction:
   min_content_length: 100     # Minimum characters to consider extraction successful
+
+summarization:
+  temperature: 0.2            # Lower = more deterministic/faithful summaries
+  max_tokens: 1024            # Upper bound on generated summary length
+  max_input_chars: 100000     # Source text budget (~25k tokens); size to your context window
+  request_timeout: 300        # Seconds to wait on the LLM before giving up
+  max_retries: 1              # Extra attempts after the first on a failure
+  # system_prompt: |          # Optional: override the built-in summarizer role
+  #   You are a meticulous research assistant...
