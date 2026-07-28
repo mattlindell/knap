@@ -1,16 +1,20 @@
 # Context
 
-The single-context anchor for Obsidian Summarizer. Read this before exploring the
+The single-context anchor for Knap. Read this before exploring the
 codebase; it defines what the project is, the vocabulary it uses, and where it's
 headed. Point-in-time decisions live in [`docs/adr/`](docs/adr/); the mechanical
 architecture lives in [`docs/architecture.md`](docs/architecture.md).
 
 ## Purpose
 
-Obsidian Summarizer is a personal, always-on background service that watches the
-Obsidian Web Clipper's output folder and turns raw web clippings (articles and
-videos) into AI-summarized, Dataview-linkable notes — degrading gracefully to a
-"needs-review" note rather than hallucinating when extraction fails.
+Knap is a personal, always-on background service that watches the Obsidian Web
+Clipper's output folder and turns raw web clippings (articles and videos) into
+AI-summarized, Dataview-linkable notes — degrading gracefully to a "needs-review"
+note rather than hallucinating when extraction fails.
+
+The name is a nod to *knapping*, the craft of striking obsidian to flake away what
+isn't needed and leave a sharp edge. It is the project's name only — the glossary
+below, not the metaphor, governs the vocabulary used in code and output.
 
 **Primary user:** a single person (Matt), one vault, local-first (Ollama by
 default). **Secondary audience:** anyone who clones the public repo. The project is

@@ -1,4 +1,7 @@
-# Obsidian Summarizer
+# Knap
+
+> *Knapping* is the craft of striking obsidian to flake away what you don't need,
+> leaving a sharp edge. Same job here: raw clippings in, the sharp part out.
 
 A file watcher that automatically processes [Obsidian](https://obsidian.md) web clippings — extracts content from URLs, sends it through an LLM for summarization, and outputs structured markdown notes.
 
@@ -39,8 +42,8 @@ New clipping appears in watched folder
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/obsidian-summarizer.git
-cd obsidian-summarizer
+git clone https://github.com/mattlindell/knap.git
+cd knap
 
 # Install dependencies
 uv sync
@@ -199,7 +202,7 @@ Available template variables:
 ## Project Structure
 
 ```text
-obsidian-summarizer/
+knap/
 ├── clipping_watcher.py      # Main watcher and processing pipeline
 ├── config.py                # YAML config loading with defaults
 ├── config.example.yaml      # Example configuration
