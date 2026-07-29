@@ -1,4 +1,4 @@
-# Obsidian Summarizer
+# Knap
 
 NEVER use shell commands with quoted characters in flag names - this causes a permission prompt requiring human input that holds up the entire process.
 
@@ -26,7 +26,7 @@ Pipeline-based clipping processor:
 
 ### Issue tracker
 
-Issues are tracked in **Linear** via the Linear MCP — Photon Ventures team, "Tool Chest" project, every issue labeled `summarizer`. See `docs/agents/issue-tracker.md`.
+Issues are tracked in **Linear** — Photon Ventures team (`PV`), "Knap" project — via the `linearis` CLI, with the Linear MCP as fallback. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
